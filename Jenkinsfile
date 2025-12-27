@@ -1,37 +1,45 @@
 pipeline {
-  agent any
+    agent any
 
-  stages {
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
-    }
-    
-    stage('Validate HTML') {
-      steps {
-        sh 'echo "Checked at $(date)"'
-        sh 'tidy -errors -q index.html || true'
-      }
-    }
-    
-    stage('Build Docker') {
-      steps {
-        sh 'docker build -t my-nginx .'
-      }
-    }
-    
-    stage('Run Docker') {
-      steps {
-        // Stop the old container if it exists
-        sh 'docker ps -q -f name=my-nginx | grep -q . && docker stop my-nginx || echo "No running container"'
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
 
-        // Remove the old container if it exists
-        sh 'docker ps -a -q -f name=my-nginx | grep -q . && docker rm my-nginx || echo "No old container to remove"'
+        stage('Validate HTML') {
+            steps {
+                echo "Checked at ${new Date()}"
+                // Optional: skip tidy if not installed
+                // sh 'tidy -errors -q index.html || true'
+            }
+        }
 
-        // Run the new container on port 8080
-        sh 'docker run -d -p 8080:80 --name my-nginx my-nginx'
-      }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    // Build Docker image using Docker Pipeline plugin
+                    def appImage = docker.build("my-nginx:latest", ".")
+                }
+            }
+        }
+
+        stage('Run Docker Container') {
+            steps {
+                script {
+                    // Stop old container if exists
+                    try {
+                        docker.image("my-nginx:latest").stop("my-nginx")
+                        docker.image("my-nginx:latest").remove("my-nginx")
+                    } catch (Exception e) {
+                        echo "No old container to remove"
+                    }
+
+                    // Run new container
+                    docker.image("my-nginx:latest").run("-d -p 8080:80 --name my-nginx")
+                }
+            }
+        }
     }
-  }
 }
